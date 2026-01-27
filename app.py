@@ -10,7 +10,7 @@ Purpose:
 - Detect Alerts (when moves exceed threshold standard deviations)
 
 Core Narratives: Goldilocks economy, Market crash, Inflation, US growth slowdown, Stagflation
-Supplementary Narratives: Worker layoffs, Labor market, International conflict, Trade war, Fiscal sustainability, Markets/Rate-watch
+Supplementary Narratives: Worker layoffs, Labor market, International conflict, Trade war, Fiscal sustainability
 """
 
 import streamlit as st
@@ -79,7 +79,7 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("**Core Narratives:**")
 st.sidebar.caption("Goldilocks Economy, Market Crash, Inflation, US Growth Slowdown, Stagflation")
 st.sidebar.markdown("**Supplementary Narratives:**")
-st.sidebar.caption("Worker Layoffs, Labor Market, International Conflict, Trade War, Fiscal Sustainability, Markets/Rate-Watch")
+st.sidebar.caption("Worker Layoffs, Labor Market, International Conflict, Trade War, Fiscal Sustainability")
 
 # ============================================================================
 # MAIN DASHBOARD

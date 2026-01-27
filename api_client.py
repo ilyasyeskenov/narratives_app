@@ -99,8 +99,10 @@ SUPPORTED_NARRATIVES: List[Dict[str, str]] = [
     # Government deficits/debt/debt ceiling/sovereign downgrade
     {"id": "Fiscal sustainability", "label": "Fiscal Sustainability", "group": "Supplementary"},
     
-    # Markets positioning, rate-cut speculation (prevents Growth slowdown leakage)
-    {"id": "Markets/Rate-watch", "label": "Markets / Rate-Watch", "group": "Supplementary"},
+    # DISABLED: "Markets/Rate-watch" contains "/" – URL path /narratives/{narrative}/metrics
+    # routes fail (404) when narrative has a slash. Re-enable when backend supports it
+    # (e.g. narrative as query param or path:path).
+    # {"id": "Markets/Rate-watch", "label": "Markets / Rate-Watch", "group": "Supplementary"},
 ]
 
 
@@ -178,6 +180,29 @@ def get_narrative_metrics(
             f"Backend timeout while fetching metrics for '{narrative}'. "
             "Try a shorter time range or fewer narratives, or retry in a moment."
         )
+        return []
+    except requests.exceptions.HTTPError as e:
+        # Parse response body when available (e.g. FastAPI {"detail": "..."})
+        detail = ""
+        if e.response is not None:
+            try:
+                body = e.response.json()
+                detail = body.get("detail", body) if isinstance(body, dict) else str(body)
+            except Exception:
+                detail = (e.response.text or "")[:500]
+            if detail and not isinstance(detail, str):
+                detail = str(detail)
+        msg = f"Error fetching metrics for '{narrative}': {e.response.status_code}"
+        if detail:
+            msg += f" — {detail}"
+        if e.response is not None and e.response.status_code >= 500:
+            msg += (
+                " Backend server error; may be temporary or data-specific. "
+                "Try a shorter range, fewer narratives, or retry later."
+            )
+        elif e.response is not None and e.response.status_code == 404:
+            msg += " Narrative not found (404). It may be missing in the backend."
+        st.error(msg)
         return []
     except requests.exceptions.RequestException as e:
         st.error(f"Error fetching metrics for {narrative}: {e}")
