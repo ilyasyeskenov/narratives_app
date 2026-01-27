@@ -1,11 +1,12 @@
 """
 API Client for Narrative Tracker MVP
-Handles backend API calls and database queries for macro narrative tracking.
+Handles backend API calls for macro narrative tracking.
 
 Backend Integration:
 - Fetches narrative metrics (intensity, sentiment, percentiles) from HTTP API
-- Queries PostgreSQL database for articles and metadata
-- Handles authentication and error recovery
+  GET /narratives/{narrative}/metrics (window, percentile_window, start_date, end_date)
+- Narrative IDs must match primary_label_v2 in the backend database
+- Handles authentication (HF_TOKEN) and error recovery
 """
 
 import os
@@ -109,28 +110,22 @@ def get_narrative_metrics(
     start_date: str,
     end_date: str,
     window: int = 60,
-    percentile_window: int = 90
+    percentile_window: int = 365,
 ) -> List[Dict[str, Any]]:
     """
     Fetch narrative metrics from backend API.
     
     Args:
-        narrative: Narrative name (e.g., "Worker layoffs")
+        narrative: Narrative ID (must match primary_label_v2, e.g. "Worker layoffs")
         start_date: Start date in YYYY-MM-DD format
         end_date: End date in YYYY-MM-DD format
-        window: Rolling window for intensity calculation (default 60)
-        percentile_window: Window for percentile calculation (default 90)
+        window: Rolling window for intensity baseline (default 60); backend 1–365.
+        percentile_window: Trailing window for percentile ranks (default 365); backend 1–730.
         
     Returns:
-        List of daily metrics dictionaries with keys:
-        - date: str (YYYY-MM-DD)
-        - article_count: int
-        - rolling_mean: float
-        - rolling_std: float
-        - intensity: float (z-score)
-        - sentiment_mean: float
-        - intensity_percentile: float
-        - sentiment_percentile: float
+        List of daily metrics with keys:
+        date, article_count, rolling_mean, rolling_std, intensity (z-score),
+        sentiment_mean, intensity_percentile, sentiment_percentile.
     """
     encoded_narrative = quote(narrative, safe="")
     url = f"{BACKEND_BASE_URL}/narratives/{encoded_narrative}/metrics"

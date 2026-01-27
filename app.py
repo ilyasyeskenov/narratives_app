@@ -318,8 +318,8 @@ for idx, narrative_id in enumerate(selected_narratives, start=1):
             narrative=narrative_id,
             start_date=start_date,
             end_date=end_date,
-            window=60,  # 60-day rolling window for intensity calculation
-            percentile_window=90,  # 90-day window for percentile calculation
+            window=60,  # Backend: intensity baseline (1–365)
+            percentile_window=365,  # Backend: percentile window (1–730), use 1-year
         )
         
         if not metrics:
@@ -379,6 +379,7 @@ for idx, narrative_id in enumerate(selected_narratives, start=1):
                 "Narrative": display_name,
                 "Intensity Z": row.get("intensity", 0),
                 "Intensity %ile": intensity_pct,
+                "Raw Intensity": int(row.get("article_count", 0)),
                 "Sentiment": row.get("sentiment_mean", 0),
                 "Sentiment %ile": sentiment_pct,
                 "1d Move": moves.get(1),
@@ -417,8 +418,8 @@ st.success(f"✓ Successfully loaded {len(df_dashboard)} narrative(s)")
 st.markdown("### 📊 Interactive Metrics Table")
 st.caption(
     "**Sortable columns** • Click headers to sort • "
-    "Intensity Z: z-score vs trailing baseline • Sentiment: mean [-1, 1] • "
-    "Percentiles: rolling 365d • Horizon Moves: z_today - z_(t-h) • Alert if |move| > 1.0"
+    "Intensity Z: z-score vs trailing baseline • Raw Intensity: article count • "
+    "Sentiment: mean [-1, 1] • Percentiles: rolling 365d • Horizon Moves: z_today - z_(t-h) • Alert if |move| > 1.0"
 )
 
 # Configure column display with enhanced formatting
@@ -439,6 +440,12 @@ column_config = {
         format="%.1f%%", 
         width="small",
         help="Intensity percentile (rolling 1-year)"
+    ),
+    "Raw Intensity": st.column_config.NumberColumn(
+        "Raw Intensity",
+        format="%d",
+        width="small",
+        help="Article count (raw intensity)"
     ),
     "Sentiment": st.column_config.NumberColumn(
         "Sentiment", 
@@ -526,7 +533,7 @@ if selected_narrative_name != "— Select a narrative —":
     st.caption(f"Detailed analysis for selected date: **{st.session_state.selected_date}**")
     
     # Quick stats row 1: Core metrics
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.metric(
             "Intensity Z-Score", 
@@ -541,11 +548,17 @@ if selected_narrative_name != "— Select a narrative —":
         )
     with col3:
         st.metric(
+            "Raw Intensity", 
+            f"{int(selected_row['Raw Intensity'])}",
+            help="Article count (raw intensity)"
+        )
+    with col4:
+        st.metric(
             "Sentiment", 
             f"{selected_row['Sentiment']:.3f}",
             help="Mean sentiment score [-1, 1]"
         )
-    with col4:
+    with col5:
         st.metric(
             "Sentiment Percentile", 
             f"{selected_row['Sentiment %ile']:.1f}%",
@@ -597,7 +610,7 @@ if selected_narrative_name != "— Select a narrative —":
                 start_date=start_date,
                 end_date=end_date,
                 window=60,
-                percentile_window=90,
+                percentile_window=365,
             )
         
         if detail_metrics:
@@ -653,7 +666,7 @@ if selected_narrative_name != "— Select a narrative —":
             
             # Highlight selected date
             selected_date_dt = pd.to_datetime(st.session_state.selected_date)
-            if selected_date_dt in df_detail['date'].values:
+            if selected_date_dt in df_detail["date"].values:
                 selected_intensity = df_detail[df_detail['date'] == selected_date_dt]['intensity'].iloc[0]
                 fig_intensity.add_trace(
                     go.Scatter(
@@ -696,7 +709,54 @@ if selected_narrative_name != "— Select a narrative —":
             st.plotly_chart(fig_intensity, use_container_width=True)
             
             # ================================================================
-            # CHART 2: Sentiment over Time
+            # CHART 2: Raw Intensity (Article Count) over Time
+            # ================================================================
+            st.markdown("#### Raw Intensity (Article Count)")
+            fig_raw = go.Figure()
+            fig_raw.add_trace(
+                go.Scatter(
+                    x=df_detail["date"],
+                    y=df_detail["article_count"],
+                    name="Raw Intensity",
+                    line=dict(color="#ff7f0e", width=2),
+                    mode="lines+markers",
+                    marker=dict(size=4),
+                    hovertemplate="<b>Date:</b> %{x|%Y-%m-%d}<br><b>Raw Intensity:</b> %{y}<extra></extra>",
+                )
+            )
+            if selected_date_dt in df_detail["date"].values:
+                sel = df_detail[df_detail["date"] == selected_date_dt]
+                raw_val = int(sel["article_count"].iloc[0])
+                fig_raw.add_trace(
+                    go.Scatter(
+                        x=[selected_date_dt],
+                        y=[raw_val],
+                        name="Selected Date",
+                        mode="markers",
+                        marker=dict(color="red", size=10, symbol="star"),
+                        showlegend=True,
+                        hovertemplate=f"<b>Selected: {st.session_state.selected_date}</b><br><b>Raw Intensity:</b> {raw_val}<extra></extra>",
+                    )
+                )
+            fig_raw.update_layout(
+                height=350,
+                xaxis_title="Date",
+                yaxis_title="Article Count",
+                hovermode="x unified",
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="right",
+                    x=1,
+                ),
+            )
+            fig_raw.update_xaxes(showgrid=True)
+            fig_raw.update_yaxes(showgrid=True)
+            st.plotly_chart(fig_raw, use_container_width=True)
+            
+            # ================================================================
+            # CHART 3: Sentiment over Time
             # ================================================================
             st.markdown("#### Sentiment")
             
@@ -797,17 +857,18 @@ if selected_narrative_name != "— Select a narrative —":
         
         st.markdown("#### Metrics Summary")
         st.json({
-            "intensity_z": float(selected_row['Intensity Z']),
-            "intensity_percentile": float(selected_row['Intensity %ile']),
-            "sentiment": float(selected_row['Sentiment']),
-            "sentiment_percentile": float(selected_row['Sentiment %ile']),
+            "intensity_z": float(selected_row["Intensity Z"]),
+            "intensity_percentile": float(selected_row["Intensity %ile"]),
+            "raw_intensity": int(selected_row["Raw Intensity"]),
+            "sentiment": float(selected_row["Sentiment"]),
+            "sentiment_percentile": float(selected_row["Sentiment %ile"]),
             "horizon_moves": {
-                "1d": float(selected_row['1d Move']) if selected_row['1d Move'] is not None else None,
-                "2d": float(selected_row['2d Move']) if selected_row['2d Move'] is not None else None,
-                "5d": float(selected_row['5d Move']) if selected_row['5d Move'] is not None else None,
-                "10d": float(selected_row['10d Move']) if selected_row['10d Move'] is not None else None,
-                "20d": float(selected_row['20d Move']) if selected_row['20d Move'] is not None else None,
-            }
+                "1d": float(selected_row["1d Move"]) if selected_row["1d Move"] is not None else None,
+                "2d": float(selected_row["2d Move"]) if selected_row["2d Move"] is not None else None,
+                "5d": float(selected_row["5d Move"]) if selected_row["5d Move"] is not None else None,
+                "10d": float(selected_row["10d Move"]) if selected_row["10d Move"] is not None else None,
+                "20d": float(selected_row["20d Move"]) if selected_row["20d Move"] is not None else None,
+            },
         })
 
 # ============================================================================
